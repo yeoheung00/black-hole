@@ -258,31 +258,48 @@ async function init() {
   let previousMouseY = 0;
   let rotationX = diskData[2];
 
-  // 마우스와 터치 좌표를 일관되게 가져오는 헬퍼 함수
+  // PC 마우스와 모바일 터치 좌표를 오류 없이 안전하게 가져오는 함수
   const getClientY = (e) => {
-    return e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+    // 1. changedTouches가 있으면 최우선 사용 (touchend, touchmove 시 안전)
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      return e.changedTouches[0].clientY;
+    }
+    // 2. touches 목록 확인
+    if (e.touches && e.touches.length > 0) {
+      return e.touches[0].clientY;
+    }
+    // 3. PC 마우스 이벤트일 때
+    return e.clientY;
   };
 
   const downEvent = (e) => {
+    // 두 손가락 이상 터치 시 회전 튐 방지
+    if (e.touches && e.touches.length > 1) return;
+
     isDragging = true;
     previousMouseY = getClientY(e);
   };
 
-  const upEvent = () => {
+  const upEvent = (e) => {
     isDragging = false;
   };
 
   const moveEvent = (e) => {
     if (!isDragging) return;
 
-    // 터치 드래그 시 모바일 브라우저 화면이 스크롤되는 현상 방지
+    // 모바일 화면 브라우저 기본 스크롤 및 바운스 현상 차단
     if (e.cancelable) e.preventDefault();
 
     const currentY = getClientY(e);
-    if (currentY === undefined) return;
+
+    // 좌표값을 읽지 못했거나 이전 값과 차이가 없으면 중단
+    if (currentY === undefined || Number.isNaN(currentY)) return;
 
     const deltaY = currentY - previousMouseY;
     previousMouseY = currentY;
+
+    // 급격하게 Y값이 튀는 경우(100px 이상 변화) 노이즈 감지하여 무시
+    if (Math.abs(deltaY) > 100) return;
 
     rotationX += deltaY * 0.005;
     diskData[2] = rotationX;
@@ -294,12 +311,16 @@ async function init() {
     );
   };
 
-  // 마우스 이벤트 등록
+  // ==========================================
+  // 이벤트 등록 (이벤트 옵션 설정 필수)
+  // ==========================================
+
+  // PC 마우스
   canvas.addEventListener("mousedown", downEvent);
   window.addEventListener("mouseup", upEvent);
   window.addEventListener("mousemove", moveEvent);
 
-  // 터치 이벤트 등록 (passive: false 필수 설정)
+  // 모바일 터치 (passive: false를 주어야 preventDefault가 동작해 화면이 튀지 않음)
   canvas.addEventListener("touchstart", downEvent, { passive: false });
   window.addEventListener("touchend", upEvent);
   window.addEventListener("touchcancel", upEvent);
