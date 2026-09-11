@@ -258,16 +258,16 @@ async function init() {
   let previousMouseY = 0;
   let rotationX = diskData[2];
 
-  canvas.addEventListener("pointerdown", (e) => {
+  const downEvent = (e) => {
     isDragging = true;
     previousMouseY = e.clientY;
-  });
+  }
 
-  window.addEventListener("pointerup", () => {
+  const upEvent = (e) => {
     isDragging = false;
-  });
+  }
 
-  window.addEventListener("pointermove", (e) => {
+  const moveEvent = (e) => {
     if (!isDragging) return;
 
     const deltaY = e.clientY - previousMouseY;
@@ -281,7 +281,14 @@ async function init() {
       8,
       new Float32Array([rotationX]),
     );
-  });
+  }
+
+  canvas.addEventListener("mousedown", downEvent);
+  canvas.addEventListener("mouseup", upEvent);
+  window.addEventListener("mousemove", moveEvent);
+  canvas.addEventListener("touchstart", downEvent);
+  canvas.addEventListener("touchend", upEvent);
+  window.addEventListener("touchmove", moveEvent);
 
   const startTime = performance.now();
   let lastFrameTime = 0;
