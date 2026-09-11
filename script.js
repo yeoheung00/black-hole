@@ -258,20 +258,31 @@ async function init() {
   let previousMouseY = 0;
   let rotationX = diskData[2];
 
+  // 마우스와 터치 좌표를 일관되게 가져오는 헬퍼 함수
+  const getClientY = (e) => {
+    return e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+  };
+
   const downEvent = (e) => {
     isDragging = true;
-    previousMouseY = e.clientY;
-  }
+    previousMouseY = getClientY(e);
+  };
 
-  const upEvent = (e) => {
+  const upEvent = () => {
     isDragging = false;
-  }
+  };
 
   const moveEvent = (e) => {
     if (!isDragging) return;
 
-    const deltaY = e.clientY - previousMouseY;
-    previousMouseY = e.clientY;
+    // 터치 드래그 시 모바일 브라우저 화면이 스크롤되는 현상 방지
+    if (e.cancelable) e.preventDefault();
+
+    const currentY = getClientY(e);
+    if (currentY === undefined) return;
+
+    const deltaY = currentY - previousMouseY;
+    previousMouseY = currentY;
 
     rotationX += deltaY * 0.005;
     diskData[2] = rotationX;
@@ -279,16 +290,20 @@ async function init() {
     device.queue.writeBuffer(
       diskUniformBuffer,
       8,
-      new Float32Array([rotationX]),
+      new Float32Array([rotationX])
     );
-  }
+  };
 
+  // 마우스 이벤트 등록
   canvas.addEventListener("mousedown", downEvent);
-  canvas.addEventListener("mouseup", upEvent);
+  window.addEventListener("mouseup", upEvent);
   window.addEventListener("mousemove", moveEvent);
-  canvas.addEventListener("touchstart", downEvent);
-  canvas.addEventListener("touchend", upEvent);
-  window.addEventListener("touchmove", moveEvent);
+
+  // 터치 이벤트 등록 (passive: false 필수 설정)
+  canvas.addEventListener("touchstart", downEvent, { passive: false });
+  window.addEventListener("touchend", upEvent);
+  window.addEventListener("touchcancel", upEvent);
+  window.addEventListener("touchmove", moveEvent, { passive: false });
 
   const startTime = performance.now();
   let lastFrameTime = 0;
