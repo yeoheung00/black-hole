@@ -254,77 +254,83 @@ async function init() {
     entries: [{ binding: 0, resource: textureView }],
   });
 
+  // 안전한 터치 Y 좌표 추출 함수
+  function getTouchY(e) {
+    if (e.touches && e.touches.length > 0) {
+      return e.touches[0].clientY;
+    }
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      return e.changedTouches[0].clientY;
+    }
+    return e.clientY;
+  }
+
   let isDragging = false;
   let previousMouseY = 0;
   let rotationX = diskData[2];
 
-  // PC 마우스와 모바일 터치 좌표를 오류 없이 안전하게 가져오는 함수
-  const getClientY = (e) => {
-    // 1. changedTouches가 있으면 최우선 사용 (touchend, touchmove 시 안전)
-    if (e.changedTouches && e.changedTouches.length > 0) {
-      return e.changedTouches[0].clientY;
-    }
-    // 2. touches 목록 확인
-    if (e.touches && e.touches.length > 0) {
-      return e.touches[0].clientY;
-    }
-    // 3. PC 마우스 이벤트일 때
-    return e.clientY;
-  };
-
-  const downEvent = (e) => {
-    // 두 손가락 이상 터치 시 회전 튐 방지
+  const handleStart = (e) => {
+    // 멀티터치는 무시 (두 손가락 터치 시 화면 튀는 현상 방지)
     if (e.touches && e.touches.length > 1) return;
 
     isDragging = true;
-    previousMouseY = getClientY(e);
+    previousMouseY = getTouchY(e);
   };
 
-  const upEvent = (e) => {
+  const handleEnd = () => {
     isDragging = false;
   };
 
-  const moveEvent = (e) => {
+  const handleMove = (e) => {
     if (!isDragging) return;
 
-    // 모바일 화면 브라우저 기본 스크롤 및 바운스 현상 차단
+    // 브라우저 기본 스크롤 동작 즉시 차단
     if (e.cancelable) e.preventDefault();
 
-    const currentY = getClientY(e);
+    const currentY = getTouchY(e);
 
-    // 좌표값을 읽지 못했거나 이전 값과 차이가 없으면 중단
-    if (currentY === undefined || Number.isNaN(currentY)) return;
+    // 예외 처리: 좌표를 못 읽었거나 값이 비정상인 경우 탈출
+    if (currentY === undefined || currentY === null || isNaN(currentY)) {
+      return;
+    }
 
     const deltaY = currentY - previousMouseY;
     previousMouseY = currentY;
 
-    // 급격하게 Y값이 튀는 경우(100px 이상 변화) 노이즈 감지하여 무시
-    if (Math.abs(deltaY) > 100) return;
+    // 터치 프레임 튐 현상 방지 (한 프레임에 50px 이상 이동한 경우 노이즈로 간주하고 무시)
+    if (Math.abs(deltaY) > 50) return;
 
+    // 회전값 변경
     rotationX += deltaY * 0.005;
+
+    // 회전각 범위를 제한하여 셰이더 연산 오버플로우 방지 (-360도 ~ 360도 유지)
+    if (rotationX > Math.PI * 2) rotationX -= Math.PI * 2;
+    if (rotationX < -Math.PI * 2) rotationX += Math.PI * 2;
+
+    // Float32Array 데이터 업데이트
     diskData[2] = rotationX;
 
+    // [핵심] 부분 업데이트 대신 전체 버퍼를 안전하게 덮어쓰기 (Alignment 오류 원천 차단)
     device.queue.writeBuffer(
       diskUniformBuffer,
-      8,
-      new Float32Array([rotationX])
+      0,
+      diskData.buffer,
+      diskData.byteOffset,
+      diskData.byteLength
     );
   };
 
-  // ==========================================
-  // 이벤트 등록 (이벤트 옵션 설정 필수)
-  // ==========================================
-
+  // --- 이벤트 리스너 등록 ---
   // PC 마우스
-  canvas.addEventListener("mousedown", downEvent);
-  window.addEventListener("mouseup", upEvent);
-  window.addEventListener("mousemove", moveEvent);
+  canvas.addEventListener("mousedown", handleStart);
+  window.addEventListener("mouseup", handleEnd);
+  window.addEventListener("mousemove", handleMove);
 
-  // 모바일 터치 (passive: false를 주어야 preventDefault가 동작해 화면이 튀지 않음)
-  canvas.addEventListener("touchstart", downEvent, { passive: false });
-  window.addEventListener("touchend", upEvent);
-  window.addEventListener("touchcancel", upEvent);
-  window.addEventListener("touchmove", moveEvent, { passive: false });
+  // 모바일 터치 (passive: false 필수)
+  canvas.addEventListener("touchstart", handleStart, { passive: false });
+  window.addEventListener("touchend", handleEnd);
+  window.addEventListener("touchcancel", handleEnd);
+  window.addEventListener("touchmove", handleMove, { passive: false });
 
   const startTime = performance.now();
   let lastFrameTime = 0;
