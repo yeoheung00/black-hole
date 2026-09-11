@@ -258,16 +258,16 @@ async function init() {
   let previousMouseY = 0;
   let rotationX = diskData[2];
 
-  canvas.addEventListener("mousedown", (e) => {
+  canvas.addEventListener("pointerdown", (e) => {
     isDragging = true;
     previousMouseY = e.clientY;
   });
 
-  window.addEventListener("mouseup", () => {
+  window.addEventListener("pointerup", () => {
     isDragging = false;
   });
 
-  window.addEventListener("mousemove", (e) => {
+  window.addEventListener("pointermove", (e) => {
     if (!isDragging) return;
 
     const deltaY = e.clientY - previousMouseY;
